@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Фиксируем время МСК и имя платы
+uci set system.@system.hostname='vt-street-m2'
+uci set system.@system.zonename='Europe/Moscow'
+uci set system.@system.timezone='MSK-3'
+
+# Обновляем NTP на пулы РФ
+while uci -q delete system.@timeserver.server; do :; done
+uci add_list system.@timeserver.server='0.ru.pool.ntp.org'
+uci add_list system.@timeserver.server='1.ru.pool.ntp.org'
+uci add_list system.@timeserver.server='2.ru.pool.ntp.org'
+uci add_list system.@timeserver.server='3.ru.pool.ntp.org'
+uci commit system
+
+# Вырезаем битую ссылку /modem из пакетного менеджера apk
+if [ -d /etc/apk/repositories.d ]; then
+    sed -i '/\/modem/d' /etc/apk/repositories.d/* 2>/dev/null
+    rm -f /etc/apk/repositories.d/modem.list 2>/dev/null
+fi
+
+exit 0
