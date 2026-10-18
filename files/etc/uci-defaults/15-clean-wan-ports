@@ -1,0 +1,6 @@
+#!/bin/sh
+# Удаляем виртуальные WAN порты, сгенерированные дефолтным профилем процессора
+uci -q delete network.wan
+uci -q delete network.wan6
+uci commit network
+exit 0
