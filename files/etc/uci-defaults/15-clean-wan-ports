@@ -1,6 +1,12 @@
 #!/bin/sh
-# Удаляем виртуальные WAN порты, сгенерированные дефолтным профилем процессора
+
+# 1. Полностью вырезаем интерфейсы лишних портов из UCI
 uci -q delete network.wan
 uci -q delete network.wan6
+
+# 2. Удаляем скрытые дефолтные маппинги портов коммутатора, которые рисуют квадраты
+uci -q delete network.@device[1] 2>/dev/null
+uci -q delete network.@device[2] 2>/dev/null
+
 uci commit network
 exit 0
