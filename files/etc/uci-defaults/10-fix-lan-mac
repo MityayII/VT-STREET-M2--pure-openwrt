@@ -1,0 +1,23 @@
+#!/bin/sh
+SERIAL="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+[ -n "$SERIAL" ] || exit 0
+
+if command -v sha256sum >/dev/null 2>&1; then
+    hash="$(printf '%s' "$SERIAL" | sha256sum | awk '{print $1}')"
+else
+    hash="$(printf '%s' "$SERIAL" | md5sum | awk '{print $1}')"
+fi
+tail="$(printf '%s' "$hash" | cut -c1-10)"
+MAC="02:$(printf '%s' "$tail" | cut -c1-2):$(printf '%s' "$tail" | cut -c3-4):$(printf '%s' "$tail" | cut -c5-6):$(printf '%s' "$tail" | cut -c7-8):$(printf '%s' "$tail" | cut -c9-10)"
+
+idx=0
+while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
+    if [ "$(uci -q get "network.@device[$idx].name")" = "br-lan" ]; then
+        uci set "network.@device[$idx].macaddr=$MAC"
+        uci set "network.lan.macaddr=$MAC"
+        uci commit network
+        break
+    fi
+    idx=$((idx + 1))
+done
+exit 0
