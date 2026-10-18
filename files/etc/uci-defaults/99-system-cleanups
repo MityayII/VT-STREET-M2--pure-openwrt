@@ -1,25 +1,33 @@
 #!/bin/sh
 
-# Фиксируем время МСК и имя платы
-uci set system.@system.hostname='vt-street-m2'
-uci set system.@system.zonename='Europe/Moscow'
-uci set system.@system.timezone='MSK-3'
-
-# Обновляем NTP на пулы РФ
-while uci -q delete system.@timeserver.server; do :; done
-uci add_list system.@timeserver.server='0.ru.pool.ntp.org'
-uci add_list system.@timeserver.server='1.ru.pool.ntp.org'
-uci add_list system.@timeserver.server='2.ru.pool.ntp.org'
-uci add_list system.@timeserver.server='3.ru.pool.ntp.org'
+# === 1. УСТАНОВКА ЧАСОВОГО ПОЯСА И NTP СЕРВЕРОВ РФ ===
+uci set system.@system[0].zonename='Europe/Moscow'
+uci set system.@system[0].timezone='MSK-3'
+uci set system.ntp.enabled='1'
+uci set system.ntp.enable_server='0'
+uci -q delete system.ntp.server
+uci add_list system.ntp.server='0.ru.pool.ntp.org'
+uci add_list system.ntp.server='1.ru.pool.ntp.org'
+uci add_list system.ntp.server='pool.ntp.org'
 uci commit system
 
-# Вырезаем битую ссылку /modem из пакетного менеджера apk
+# === 2. СИНХРОНИЗАЦИЯ ВРЕМЕНИ ДЛЯ APK UPDATE ===
+/etc/init.d/sysntpd restart
+
+# Цикл ожидания модема и актуального времени (до 40 секунд)
+for i in $(seq 1 20); do
+    if [ "$(date +%Y)" -ge 2026 ]; then break; fi
+    sleep 2
+done
+
+# === 3. ИСПРАВЛЕНИЕ APK UPDATE (ВЫРЕЗАЕМ БИТУЮ ССЫЛКУ) ===
+# Выполняется строго ПОСЛЕ синхронизации времени
 if [ -d /etc/apk/repositories.d ]; then
     sed -i '/\/modem/d' /etc/apk/repositories.d/* 2>/dev/null
     rm -f /etc/apk/repositories.d/modem.list 2>/dev/null
 fi
 
-# Отключение автоконфигурации IPv6 на уровне ядра sysctl
+# === 4. ЖЕСТКОЕ ОТКЛЮЧЕНИЕ IPV6 НА УРОВНЕ ЯДРА SYSCTL ===
 mkdir -p /etc/sysctl.d
 echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.d/local.conf
 echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.d/local.conf
