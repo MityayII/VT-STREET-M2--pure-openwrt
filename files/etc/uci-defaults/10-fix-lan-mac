@@ -1,4 +1,34 @@
 #!/bin/sh
+
+# 1. ФУНКЦИЯ ЧТЕНИЯ ФИЗИЧЕСКОГО МАК-АДРЕСА ИЗ РАЗДЕЛА FACTORY
+factory_mac() {
+    local mtd
+    mtd=$(find_mtd_part "Factory")
+    [ -n "$mtd" ] || return 1
+    
+    # Считываем первые 6 байт с физического смещения 0x28 (40 в десятичной системе)
+    # Переводим hex-дамп в стандартный вид двоеточий MAC-адреса
+    dd if="$mtd" bs=1 skip=40 count=6 2>/dev/null | hexdump -v -e '1/1 "%02X:"' | sed 's/:$//'
+}
+
+# Проверяем валидность считанного MAC-адреса (чтобы там не было нулей или FFFF)
+mac_valid() {
+    case "$1" in
+        "00:00:00:00:00:00"|"FF:FF:FF:FF:FF:FF"|"") return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+# 2. ПОПЫТКА ИСПОЛЬЗОВАТЬ ЗАВОДСКОЙ МАК
+MAC=$(factory_mac)
+
+if mac_valid "$MAC"; then
+    # Если заводской MAC найден на смещении 0x28 и он правильный,
+    # скрипт просто выходит и не включает генератор по boot_id
+    exit 0
+fi
+
+# 3. АВАРИЙНЫЙ ГЕНЕРАТОР ПО BOOT_ID (Если в Factory пусто)
 SERIAL="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
 [ -n "$SERIAL" ] || exit 0
 
@@ -10,6 +40,7 @@ fi
 tail="$(printf '%s' "$hash" | cut -c1-10)"
 MAC="02:$(printf '%s' "$tail" | cut -c1-2):$(printf '%s' "$tail" | cut -c3-4):$(printf '%s' "$tail" | cut -c5-6):$(printf '%s' "$tail" | cut -c7-8):$(printf '%s' "$tail" | cut -c9-10)"
 
+# Прописываем сгенерированный MAC в сетевую конфигурацию
 idx=0
 while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
     if [ "$(uci -q get "network.@device[$idx].name")" = "br-lan" ]; then
