@@ -52,30 +52,20 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Apply Board Support Files (maxbax)
+      - name: Apply Board Support Files (Как у Макса)
         run: |
           # 1. Интеграция DTS платы
           cp "port/mt7621_vertell_vt-mt7621d.dts" "openwrt/target/linux/ramips/dts/"
           
-          # 2. Интеграция Профиля платы: нативно дописываем его в конец общего mt7621.mk
+          # 2. Интеграция Профиля платы
           printf '\n' >> "openwrt/target/linux/ramips/image/mt7621.mk"
           cat "port/vertell-profile.mk" >> "openwrt/target/linux/ramips/image/mt7621.mk"
 
-          # 3. Переносим оверлеи (Скрипт MAC, Время) напрямую в базовые файлы образа
+          # 3. Переносим оверлеи напрямую в базовые файлы образа
           mkdir -p openwrt/package/base-files/image-config/files
           cp -r files/* openwrt/package/base-files/image-config/files/
 
-          # 4. Добавляем проверенную UCI-команду русского языка
-          mkdir -p openwrt/package/base-files/image-config/files/etc/uci-defaults
-          cat << 'EOF' > openwrt/package/base-files/image-config/files/etc/uci-defaults/98-language-tweak
-          #!/bin/sh
-          uci set luci.main.lang='ru'
-          uci commit luci
-          exit 0
-          EOF
-          chmod +x openwrt/package/base-files/image-config/files/etc/uci-defaults/98-language-tweak
-
-          # 5. Загружаем базовую конфигурацию сборки
+          # 4. Загружаем базовую конфигурацию сборки
           cp config/seed.config openwrt/.config
           cd openwrt
           make defconfig
