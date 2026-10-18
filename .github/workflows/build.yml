@@ -1,0 +1,96 @@
+name: Build Pure OpenWrt for VT-STREET-M2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pure-openwrt-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+
+    env:
+      OPENWRT_TAG: v25.12.5
+
+    steps:
+      - name: Checkout Pure Repository
+        uses: actions/checkout@v4
+
+      - name: Install OpenWrt build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gcc-multilib gettext git \
+            libncurses-dev libssl-dev python3 python3-setuptools python3-pyelftools \
+            rsync swig unzip zlib1g-dev file wget curl time xsltproc ca-certificates
+
+      - name: Fetch Clean OpenWrt Source
+        run: |
+          git init openwrt
+          git -C openwrt remote add origin https://github.com/openwrt/openwrt.git
+          git -C openwrt fetch origin refs/tags/$OPENWRT_TAG:refs/tags/$OPENWRT_TAG
+          git -C openwrt checkout tags/$OPENWRT_TAG
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: pure-openwrt-dl-${{ env.OPENWRT_TAG }}
+
+      - name: Inject fildunsky feed and install packages
+        working-directory: openwrt
+        run: |
+          echo "src-git modem https://github.com/fildunsky/luci-app-5gmodem.git" >> feeds.conf.default
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Apply Board Support Files
+        run: |
+          # 1. Накатываем файлы аппаратной платформы (DTS и Профиль)
+          rsync -av target/ openwrt/target/
+          
+          # 2. Переносим оверлеи (Скрипт MAC, Время) напрямую в базовые файлы образа
+          mkdir -p openwrt/package/base-files/image-config/files
+          cp -r files/* openwrt/package/base-files/image-config/files/
+
+          # 3. Добавляем проверенную UCI-команду русского языка
+          mkdir -p openwrt/package/base-files/image-config/files/etc/uci-defaults
+          cat << 'EOF' > openwrt/package/base-files/image-config/files/etc/uci-defaults/98-language-tweak
+          #!/bin/sh
+          uci set luci.main.lang='ru'
+          uci commit luci
+          exit 0
+          EOF
+          chmod +x openwrt/package/base-files/image-config/files/etc/uci-defaults/98-language-tweak
+
+          # 4. Загружаем базовую конфигурацию сборки
+          cp config/seed.config openwrt/.config
+          cd openwrt
+          make defconfig
+
+          # 5. Нативный хук: вырезаем строку /modem из repositories.d перед упаковкой squashfs
+          echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null\"" >> .config
+
+      - name: Download source packages
+        working-directory: openwrt
+        run: make download -j8
+
+      - name: Build OpenWrt Firmware
+        run: |
+          cd openwrt
+          make -j"$(nproc)" V=s
+
+      - name: Upload Finished Images
+        uses: actions/upload-artifact@v4
+        with:
+          name: pure-openwrt-vt-street-m2
+          retention-days: 14
+          path: openwrt/bin/targets/ramips/mt7621/*sysupgrade.bin
