@@ -1,18 +1,6 @@
 #!/bin/sh
 
-# ИСПОЛЬЗУЕМ ТОЛЬКО ВСТРОЕННЫЙ СИСТЕМНЫЙ ИНСТРУМЕНТАРИЙ OPENWRT
-factory_mac() {
-	local mtd
-	mtd=$(find_mtd_part "Factory")
-	[ -n "$mtd" ] || return 1
-	
-	# Нативный и безопасный аналог hexdump силами встроенного ash-интерпретатора
-	# Читаем смещение 0x28 (40 байт) без блокировки ядра
-	local mac
-	mac=$(hexdump -s 40 -n 6 -e '1/1 "%02X:"' "$mtd" 2>/dev/null)
-	[ -n "$mac" ] && echo "${mac%?}"
-}
-
+# Функция проверки валидности MAC (чтобы отсечь FFFF и нули)
 mac_valid() {
 	case "$1" in
 		"00:00:00:00:00:00"|"FF:FF:FF:FF:FF:FF"|"") return 1 ;;
@@ -20,24 +8,24 @@ mac_valid() {
 	esac
 }
 
-# Попытка прочитать оригинальный MAC
-MAC=$(factory_mac)
+# 1. Пытаемся нативно прочитать MAC, который ядро само вытащило из DTS/Factory
+MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
 
-# Если на смещении 0x28 лежат FFFF или пустота - включаем безопасный генератор
+# 2. Если там лежат FFFF (как в нашем случае) — включаем генератор по CPU boot_id
 if ! mac_valid "$MAC"; then
 	SERIAL="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
 	if [ -n "$SERIAL" ]; then
-		# Простая и надежная генерация без вызова тяжелых внешних утилит sha256sum
+		# Генерируем стабильный MAC через md5sum (он на 100% встроен в BusyBox)
 		hash="$(printf '%s' "$SERIAL" | md5sum | awk '{print $1}')"
 		tail="$(printf '%s' "$hash" | cut -c1-10)"
 		MAC="02:$(printf '%s' "$tail" | cut -c1-2):$(printf '%s' "$tail" | cut -c3-4):$(printf '%s' "$tail" | cut -c5-6):$(printf '%s' "$tail" | cut -c7-8):$(printf '%s' "$tail" | cut -c9-10)"
 	else
-		# Тотальный бэкап на случай отсутствия boot_id
+		# Аварийный бэкап, если boot_id недоступен
 		MAC="02:EB:D7:A1:B2:C3"
 	fi
 fi
 
-# Применяем MAC-адрес к сетевому мосту домашней сети
+# 3. Жестко фиксируем MAC-адрес на домашнем мосту br-lan
 idx=0
 while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
 	if [ "$(uci -q get "network.@device[$idx].name")" = "br-lan" ]; then
