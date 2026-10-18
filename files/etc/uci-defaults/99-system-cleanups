@@ -19,4 +19,9 @@ if [ -d /etc/apk/repositories.d ]; then
     rm -f /etc/apk/repositories.d/modem.list 2>/dev/null
 fi
 
+# Отключение автоконфигурации IPv6 на уровне ядра sysctl
+mkdir -p /etc/sysctl.d
+echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.d/local.conf
+echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.d/local.conf
+
 exit 0
