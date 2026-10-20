@@ -28,9 +28,8 @@ factory_valid()
 
 find_cpu_serial()
 {
-	# НАША ФИНАЛЬНАЯ ПОБЕДА: Снимаем уникальный и вечный хэш-маркер с первых байт раздела Config платы
-	if [ -e /dev/mtd1 ]; then
-		dd if=/dev/mtd1 bs=1 count=128 2>/dev/null | sha256sum | awk '{print $1}'
+	if [ -f /sys/class/net/eth0/address ]; then
+		cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':'
 		return 0
 	fi
 	return 1
