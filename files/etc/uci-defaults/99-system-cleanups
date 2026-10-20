@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # === 1. УСТАНОВКА ЧАСОВОГО ПОЯСА И NTP СЕРВЕРОВ РФ ===
-uci set system.@system[0].zonename='Europe/Moscow'
-uci set system.@system[0].timezone='MSK-3'
+uci set system.@system.zonename='Europe/Moscow'
+uci set system.@system.timezone='MSK-3'
 uci set system.ntp.enabled='1'
 uci set system.ntp.enable_server='0'
 uci -q delete system.ntp.server
@@ -28,22 +28,35 @@ if [ -d /etc/apk/repositories.d ]; then
 fi
 
 # === 4. ЖЕСТКОЕ ОТКЛЮЧЕНИЕ IPV6 НА УРОВНЕ ЯДРА И СЛУЖБ ОС ===
-# Отключаем обработку на уровне сетевого стека ядра (что мы проверили на железе)
 echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.conf
 echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.conf
 echo "net.ipv6.conf.lo.disable_ipv6=1" >> /etc/sysctl.conf
 sysctl -p /etc/sysctl.conf 2>/dev/null
 
-# Нативно тушим раздачу IPv6-адресов в конфигурации DHCP (Убираем сервера)
 uci set dhcp.lan.dhcpv6='disabled'
 uci set dhcp.lan.ra='disabled'
 uci commit dhcp
-
-# Перезапускаем службу DHCP, чтобы освободить оперативную память
 /etc/init.d/odhcpd restart 2>/dev/null
 
-# ФИНАЛЬНЫЙ АККОРД: Стираем пустышку IPv6 ULA-PREFIX из статуса LuCI
 uci -q delete network.globals.ula_prefix
 uci commit network
+
+# === 5. НАСТРОЙКА LED-ИНДИКАЦИИ СЕТИ ИНТЕРНЕТА (По канону Vertell) ===
+# Удаляем старое правило, чтобы конфигурация не задваивалась
+uci -q delete system.led_net
+
+# Прописываем точные фабричные параметры под green:wan для карты eth1
+uci set system.led_net=led
+uci set system.led_net.name='net'
+uci set system.led_net.sysfs='green:wan'
+uci set system.led_net.trigger='netdev'
+uci set system.led_net.dev='eth1'
+uci add_list system.led_net.mode='link'
+uci add_list system.led_net.mode='tx'
+uci add_list system.led_net.mode='rx'
+uci commit system
+
+# Перезапускаем службу светодиодов, чтобы индикатор применил настройки
+/etc/init.d/led restart 2>/dev/null
 
 exit 0
