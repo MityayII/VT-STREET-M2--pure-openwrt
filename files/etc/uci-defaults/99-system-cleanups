@@ -27,9 +27,19 @@ if [ -d /etc/apk/repositories.d ]; then
     rm -f /etc/apk/repositories.d/modem.list 2>/dev/null
 fi
 
-# === 4. ЖЕСТКОЕ ОТКЛЮЧЕНИЕ IPV6 НА УРОВНЕ ЯДРА SYSCTL ===
-mkdir -p /etc/sysctl.d
-echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.d/local.conf
-echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.d/local.conf
+# === 4. ЖЕСТКОЕ ОТКЛЮЧЕНИЕ IPV6 НА УРОВНЕ ЯДРА И СЛУЖБ ОС ===
+# Отключаем обработку на уровне сетевого стека ядра (что мы проверили на железе)
+echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.conf
+echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.conf
+echo "net.ipv6.conf.lo.disable_ipv6=1" >> /etc/sysctl.conf
+sysctl -p /etc/sysctl.conf 2>/dev/null
+
+# Нативно тушим раздачу IPv6-адресов в конфигурации DHCP (Убираем сервера)
+uci set dhcp.lan.dhcpv6='disabled'
+uci set dhcp.lan.ra='disabled'
+uci commit dhcp
+
+# Перезапускаем службу DHCP, чтобы освободить оперативную память
+/etc/init.d/odhcpd restart 2>/dev/null
 
 exit 0
