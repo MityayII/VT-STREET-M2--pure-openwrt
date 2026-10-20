@@ -52,29 +52,76 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Apply Board Support Files (Как у Макса)
+      - name: Apply Board Support Files (Каноничный инжектор Максбакса)
         run: |
-          # 1. Интеграция DTS платы
-          cp "port/mt7621_vertell_vt-mt7621d.dts" "openwrt/target/linux/ramips/dts/"
-          
-          # 2. Интеграция Профиля платы
-          printf '\n' >> "openwrt/target/linux/ramips/image/mt7621.mk"
-          cat "port/vertell-profile.mk" >> "openwrt/target/linux/ramips/image/mt7621.mk"
+          OPENWRT_DIR="$PWD/openwrt"
+          REPO_DIR="$PWD"
 
-          # 3. Переносим оверлеи напрямую в базовые файлы образа
+          # 1. Интеграция DTS платы
+          cp "$REPO_DIR/port/mt7621_vertell_vt-mt7621d.dts" \
+            "$OPENWRT_DIR/target/linux/ramips/dts/mt7621_vertell_vt-mt7621d.dts"
+
+          # 2. Интеграция Профиля платы в mt7621.mk
+          PROFILE_FILE="$OPENWRT_DIR/target/linux/ramips/image/mt7621.mk"
+          if ! grep -q '^define Device/vertell_vt-mt7621d$' "$PROFILE_FILE"; then
+            printf '\n' >> "$PROFILE_FILE"
+            cat "$REPO_DIR/port/vertell-profile.mk" >> "$PROFILE_FILE"
+          fi
+
+          # 3. ПАТЧ ПОРТОВ: Python врезает нашу плату в системный 02_network (Как у Макса)
+          NETWORK_FILE="$OPENWRT_DIR/target/linux/ramips/mt7621/base-files/etc/board.d/02_network"
+          python3 - "$NETWORK_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          needle = '\tcase $board in\n'
+          insert = (
+              '\tcase $board in\n'
+              '\tvertell,vt-mt7621d)\n'
+              '\t\tucidef_set_interface_lan "lan1"\n'
+              '\t\t;;\n'
+          )
+          if '\tvertell,vt-mt7621d)\n' not in s:
+              if needle not in s:
+                  raise SystemExit('ERROR: case anchor not found in 02_network')
+              s = s.replace(needle, insert, 1)
+              p.write_text(s)
+          PY
+
+          # 4. ЗАЩИТА NAND-ОБНОВЛЕНИЯ: Python врезает плату в системный platform.sh (Как у Макса)
+          UPGRADE_FILE="$OPENWRT_DIR/target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh"
+          python3 - "$UPGRADE_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          s = p.read_text()
+          entry = '\tvertell,vt-mt7621d|\\\n'
+          if entry not in s:
+              needle = '\tcase "$board" in\n\tampedwireless,ally-00x19k|\\\n'
+              insert = '\tcase "$board" in\n' + entry + '\tampedwireless,ally-00x19k|\\\n'
+              if needle not in s:
+                  raise SystemExit('ERROR: NAND upgrade case anchor not found in platform.sh')
+              s = s.replace(needle, insert, 1)
+              p.write_text(s)
+
+          start = s.find(entry)
+          end = s.find('\n\t\t;;', start)
+          if start < 0 or end < 0 or 'nand_do_upgrade "$1"' not in s[start:end]:
+              raise SystemExit('ERROR: VT-STREET-M2 is not routed to nand_do_upgrade')
+          PY
+
+          # 5. Переносим наши оверлеи (mac, hotplug-время) напрямую в базовые файлы образа
           mkdir -p openwrt/package/base-files/image-config/files
           cp -r files/* openwrt/package/base-files/image-config/files/
 
-          # 4. Загружаем базовую конфигурацию сборки
+          # 6. Загружаем базовую конфигурацию сборки
           cp config/seed.config openwrt/.config
           cd openwrt
           make defconfig
 
-          # 6. Нативный хук: вырезаем строку /modem из repositories.d перед упаковкой squashfs
+          # 7. Нативный хук: вырезаем строку /modem из repositories.d перед упаковкой squashfs
           echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null\"" >> .config
-      - name: Download source packages
-        working-directory: openwrt
-        run: make download -j8
 
       - name: Build OpenWrt Firmware
         run: |
