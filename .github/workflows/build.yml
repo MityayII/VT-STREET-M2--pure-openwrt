@@ -111,25 +111,23 @@ jobs:
               raise SystemExit('ERROR: VT-STREET-M2 is not routed to nand_do_upgrade')
           PY
 
-          # 5. Переносим наши оверлеи (mac, hotplug-время) напрямую в базовые файлы образа
-          mkdir -p openwrt/package/base-files/image-config/files
-          cp -r files/* openwrt/package/base-files/image-config/files/
+          # 5. Переносим наши оверлеи напрямую в корневую структуру базовых файлов OpenWrt
+          mkdir -p openwrt/package/base-files/files/etc/uci-defaults
+          cp -r files/etc/uci-defaults/* openwrt/package/base-files/files/etc/uci-defaults/
 
-
-          # ЖЕЛЕЗНЫЙ ХУК: Выставляем права на запуск для обеих папок автоматики!
-          chmod +x openwrt/package/base-files/image-config/files/etc/uci-defaults/10-fix-lan-mac 2>/dev/null || true
-          chmod +x openwrt/package/base-files/image-config/files/etc/hotplug.d/iface/99-system-cleanups 2>/dev/null || true
+          # Жестко выдаем права на запуск нативным файлам в сборочном дереве
+          chmod +x openwrt/package/base-files/files/etc/uci-defaults/* 2>/dev/null || true
 
           # 6. Загружаем базовую конфигурацию сборки
           cp config/seed.config openwrt/.config
           cd openwrt
           make defconfig
           
-          # === ВОТ ЭТУ ОДНУ СТРОКУ МЫ ДОБАВЛЯЕМ В BUILD.YML ===
+          # Намертво патчим имя хоста на уровне исходников генератора конфигов
           sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' package/base-files/files/bin/config_generate
 
-          # 7. Нативный хук: вырезаем строку /modem и ЖЕСТКО выдаем права +x скриптам прямо внутри SquashFS
-          echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null; chmod +x \\\$(IMAGE_ROOTFS)/etc/uci-defaults/* 2>/dev/null || true\"" >> .config
+          # 7. Нативный и безопасный хук SquashFS (только чистка фида apk, без chmod)
+          echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null || true\"" >> .config
 
       - name: Build OpenWrt Firmware
         run: |
