@@ -124,7 +124,7 @@ jobs:
           make defconfig
           
           # Намертво патчим имя хоста на уровне исходников генератора конфигов
-          sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' package/base-files/files/bin/config_generate
+          #sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' package/base-files/files/bin/config_generate
 
           # 7. Нативный и безопасный хук SquashFS (только чистка фида apk, без chmod)
           echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null || true\"" >> .config
