@@ -11,6 +11,10 @@ uci add_list system.ntp.server='1.ru.pool.ntp.org'
 uci add_list system.ntp.server='pool.ntp.org'
 uci commit system
 
+# Возвращаем имя маршрутизатора вместо дефолтного OpenWrt
+uci set system.@system[0].hostname='VT-STREET-M2'
+uci commit system
+
 # === 2. СИНХРОНИЗАЦИЯ ВРЕМЕНИ ДЛЯ APK UPDATE ===
 /etc/init.d/sysntpd restart
 
