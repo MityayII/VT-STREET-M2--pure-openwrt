@@ -124,6 +124,7 @@ jobs:
           cp config/seed.config openwrt/.config
           cd openwrt
           make defconfig
+          
           # === ВОТ ЭТУ ОДНУ СТРОКУ МЫ ДОБАВЛЯЕМ В BUILD.YML ===
           sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' openwrt/package/base-files/files/bin/config_generate
 
