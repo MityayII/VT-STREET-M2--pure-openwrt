@@ -20,16 +20,22 @@ derive_mac() {
 		"$(printf '%s' "$h" | cut -c5-6)" \
 		"$(printf '%s' "$h" | cut -c7-8)" \
 		"$(printf '%s' "$h" | cut -c9-10)"
-}
+set_bridge_mac()
+{
+	local mac="$1" idx name
+	idx=0
+	while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
+		name="$(uci -q get "network.@device[$idx].name")"
+		if [ "$name" = "br-lan" ]; then
+			uci set "network.@device[$idx].macaddr=$mac"
+			uci set "network.lan.macaddr=$mac"
+			uci commit network
+			return 0
+		fi
+		idx=$((idx + 1))
+	done
 
-set_bridge_mac() {
-	local mac="$1"
-	
-	# Намертво привязываем вычисленный адрес к свитчу и логической сети
-	uci set network.eth0=device
-	uci set network.eth0.name='eth0'
-	uci set network.eth0.macaddr="$mac"
-	uci set network.lan.macaddr="$mac"
+	uci set "network.lan.macaddr=$mac"
 	uci commit network
 	return 0
 }
