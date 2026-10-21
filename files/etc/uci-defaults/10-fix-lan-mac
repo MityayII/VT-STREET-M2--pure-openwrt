@@ -20,6 +20,8 @@ derive_mac() {
 		"$(printf '%s' "$h" | cut -c5-6)" \
 		"$(printf '%s' "$h" | cut -c7-8)" \
 		"$(printf '%s' "$h" | cut -c9-10)"
+}
+
 set_bridge_mac()
 {
 	local mac="$1" idx name
