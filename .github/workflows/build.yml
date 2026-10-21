@@ -115,8 +115,6 @@ jobs:
           mkdir -p openwrt/package/base-files/image-config/files
           cp -r files/* openwrt/package/base-files/image-config/files/
 
-          # === ВОТ ЭТУ ОДНУ СТРОКУ МЫ ДОБАВЛЯЕМ В BUILD.YML ===
-          sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' openwrt/package/base-files/files/bin/config_generate
 
           # ЖЕЛЕЗНЫЙ ХУК: Выставляем права на запуск для обеих папок автоматики!
           chmod +x openwrt/package/base-files/image-config/files/etc/uci-defaults/10-fix-lan-mac 2>/dev/null || true
@@ -126,6 +124,8 @@ jobs:
           cp config/seed.config openwrt/.config
           cd openwrt
           make defconfig
+          # === ВОТ ЭТУ ОДНУ СТРОКУ МЫ ДОБАВЛЯЕМ В BUILD.YML ===
+          sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' openwrt/package/base-files/files/bin/config_generate
 
           # 7. Нативный хук: вырезаем строку /modem и ЖЕСТКО выдаем права +x скриптам прямо внутри SquashFS
           echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null; chmod +x \\\$(IMAGE_ROOTFS)/etc/uci-defaults/* 2>/dev/null || true\"" >> .config
