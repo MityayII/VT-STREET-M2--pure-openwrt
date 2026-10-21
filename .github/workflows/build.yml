@@ -124,8 +124,8 @@ jobs:
           cd openwrt
           make defconfig
 
-          # 7. Нативный хук: вырезаем строку /modem из repositories.d перед упаковкой squashfs
-          echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null\"" >> .config
+          # 7. Нативный хук: вырезаем строку /modem и ЖЕСТКО выдаем права +x скриптам прямо внутри SquashFS
+          echo "CONFIG_TARGET_IMAGES_GZ_CUSTOM_SCRIPT=\"sed -i '/\/modem/d' \\\$(IMAGE_ROOTFS)/etc/apk/repositories.d/* 2>/dev/null; chmod +x \\\$(IMAGE_ROOTFS)/etc/uci-defaults/* 2>/dev/null || true\"" >> .config
 
       - name: Build OpenWrt Firmware
         run: |
