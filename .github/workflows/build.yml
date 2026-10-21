@@ -111,11 +111,11 @@ jobs:
               raise SystemExit('ERROR: VT-STREET-M2 is not routed to nand_do_upgrade')
           PY
 
-          # 5. Переносим наши оверлеи напрямую в корневую структуру базовых файлов OpenWrt
+          # 5. Переносим наши оверлеи напрямую в официальную оверлей-структуру OpenWrt
           mkdir -p openwrt/package/base-files/files/etc/uci-defaults
           cp -r files/etc/uci-defaults/* openwrt/package/base-files/files/etc/uci-defaults/
 
-          # Жестко выдаем права на запуск нативным файлам в сборочном дереве
+          # Выдаем права на запуск нативным файлам в сборочном дереве
           chmod +x openwrt/package/base-files/files/etc/uci-defaults/* 2>/dev/null || true
 
           # 6. Загружаем базовую конфигурацию сборки
