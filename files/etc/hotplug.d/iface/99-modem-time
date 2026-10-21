@@ -1,0 +1,12 @@
+#!/sh
+
+# Проверяем, что событие прилетело именно от интерфейса сотового модема
+# и что интерфейс успешно поднялся (статус up)
+if [ "$INTERFACE" = "modem" ] && [ "$ACTION" = "ifup" ]; then
+	logger -t "hotplug-time" "Modem linked up! Forcing immediate sysntpd resync..."
+	
+	# Мгновенно пинаем службу времени, чтобы она не ждала планового часа
+	/etc/init.d/sysntpd restart 2>/dev/null
+fi
+
+exit 0
