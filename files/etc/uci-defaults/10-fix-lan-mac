@@ -12,7 +12,6 @@ factory_hex()
 	local mtd
 	mtd="$(awk -F: '$2 ~ /"Factory"/ {print "/dev/" $1; exit}' /proc/mtd 2>/dev/null)"
 	[ -n "$mtd" ] || return 1
-	# Нативный легкий съем сырых байт без использования hexdump
 	dd if="$mtd" bs=1 skip=40 count=6 2>/dev/null | sha256sum | awk '{print $1}' | cut -c1-12
 }
 
@@ -28,7 +27,6 @@ factory_valid()
 
 find_cpu_serial()
 {
-	# Нативно снимаем вечный стабильный аппаратный MAC самого процессора MediaTek MT7621
 	if [ -f /sys/class/net/eth0/address ]; then
 		cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':'
 		return 0
@@ -39,14 +37,7 @@ find_cpu_serial()
 derive_mac()
 {
 	local serial="$1" hash tail
-	if command -v sha256sum >/dev/null 2>&1; then
-		hash="$(printf '%s' "$serial" | sha256sum | awk '{print $1}')"
-	elif command -v md5sum >/dev/null 2>&1; then
-		hash="$(printf '%s' "$serial" | md5sum | awk '{print $1}')"
-	else
-		return 1
-	fi
-
+	hash="$(printf '%s' "$serial" | sha256sum | awk '{print $1}')"
 	tail="$(printf '%s' "$hash" | cut -c1-10)"
 	[ "${#tail}" -eq 10 ] || return 1
 	printf '02:%s:%s:%s:%s:%s\n' \
@@ -61,13 +52,13 @@ set_bridge_mac()
 {
 	local mac="$1" idx
 	idx=0
-	# 1. Шьем вечный MAC во все зарегистрированные UCI-устройства моста
+	# 1. Шьем вечный MAC во все устройства моста
 	while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
 		uci set "network.@device[$idx].macaddr=$mac"
 		idx=$((idx + 1))
 	done
 
-	# 2. ЖЕСТКО СИНХРОНИЗИРУЕМ ЖЕЛЕЗО: Привязываем вечный MAC к физическому контроллеру lan
+	# 2. СИНХРОНИЗАЦИЯ С ЖЕЛЕЗОМ: Привязываем вечный MAC к физическому контроллеру lan
 	uci set "network.lan.macaddr=$mac"
 	uci commit network
 	return 0
@@ -89,16 +80,17 @@ while [ "$i" -lt 15 ]; do
 done
 
 if [ -z "$SERIAL" ]; then
-	log "blank Factory MAC and no CPU serial available; leaving defaults script for retry"
+	log "blank Factory MAC and no CPU serial available"
 	exit 1
 fi
 
 MAC="$(derive_mac "$SERIAL")"
 if [ -z "$MAC" ]; then
-	log "unable to derive deterministic MAC from CPU serial"
+	log "unable to derive deterministic MAC"
 	exit 1
 fi
 
+# Вызов функции (БЕЗ моих дурацких опечаток!)
 set_bridge_mac "$MAC" || exit 1
 log "provisioned deterministic LAN MAC $MAC"
 exit 0
