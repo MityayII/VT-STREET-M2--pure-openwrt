@@ -1,32 +1,6 @@
 #!/bin/sh
 
-TAG="pure-mac"
-
-log()
-{
-	logger -t "$TAG" "$*"
-}
-
-factory_hex()
-{
-	local mtd
-	mtd="$(awk -F: '$2 ~ /"Factory"/ {print "/dev/" $1; exit}' /proc/mtd 2>/dev/null)"
-	[ -n "$mtd" ] || return 1
-	dd if="$mtd" bs=1 skip=40 count=6 2>/dev/null | sha256sum | awk '{print $1}' | cut -c1-12
-}
-
-factory_valid()
-{
-	local h="$1" first
-	[ "${#h}" -eq 12 ] || return 1
-	[ "$h" != "000000000000" ] || return 1
-	[ "$h" != "ffffffffffff" ] || return 1
-	first=$((0x${h%??????????}))
-	[ $((first & 1)) -eq 0 ]
-}
-
-find_cpu_serial()
-{
+find_cpu_serial() {
 	if [ -f /sys/class/net/eth0/address ]; then
 		cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':'
 		return 0
@@ -34,66 +8,37 @@ find_cpu_serial()
 	return 1
 }
 
-derive_mac()
-{
-	local serial="$1" hash tail
-	if command -v sha256sum >/dev/null 2>&1; then
-		hash="$(printf '%s' "$serial" | sha256sum | awk '{print $1}')"
-	elif command -v md5sum >/dev/null 2>&1; then
-		hash="$(printf '%s' "$serial" | md5sum | awk '{print $1}')"
-	else
-		return 1
-	fi
-
-	tail="$(printf '%s' "$hash" | cut -c1-10)"
-	[ "${#tail}" -eq 10 ] || return 1
+derive_mac() {
+	local serial="$1" h
+	h="$(printf '%s' "$serial" | sha256sum | awk '{print $1}')"
+	[ -n "$h" ] || return 1
+	
+	# Безопасно режем хэш напрямую через cut без проверки длины строки
 	printf '02:%s:%s:%s:%s:%s\n' \
-		"$(printf '%s' "$tail" | cut -c1-2)" \
-		"$(printf '%s' "$tail" | cut -c3-4)" \
-		"$(printf '%s' "$tail" | cut -c5-6)" \
-		"$(printf '%s' "$tail" | cut -c7-8)" \
-		"$(printf '%s' "$tail" | cut -c9-10)"
+		"$(printf '%s' "$h" | cut -c1-2)" \
+		"$(printf '%s' "$h" | cut -c3-4)" \
+		"$(printf '%s' "$h" | cut -c5-6)" \
+		"$(printf '%s' "$h" | cut -c7-8)" \
+		"$(printf '%s' "$h" | cut -c9-10)"
 }
 
-set_bridge_mac()
-{
+set_bridge_mac() {
 	local mac="$1"
-
+	
+	# Намертво привязываем вычисленный адрес к свитчу и логической сети
 	uci set network.eth0=device
 	uci set network.eth0.name='eth0'
 	uci set network.eth0.macaddr="$mac"
-
 	uci set network.lan.macaddr="$mac"
 	uci commit network
 	return 0
 }
 
-FACTORY="$(factory_hex)"
-if factory_valid "$FACTORY"; then
-	log "valid Factory MAC present; fallback not needed"
-	exit 0
-fi
-
-SERIAL=""
-i=0
-while [ "$i" -lt 15 ]; do
-	SERIAL="$(find_cpu_serial)"
-	[ -n "$SERIAL" ] && break
-	sleep 1
-	i=$((i + 1))
-done
-
-if [ -z "$SERIAL" ]; then
-	log "blank Factory MAC and no CPU serial available; leaving defaults script for retry"
-	exit 1
-fi
+SERIAL="$(find_cpu_serial)"
+[ -n "$SERIAL" ] || exit 1
 
 MAC="$(derive_mac "$SERIAL")"
-if [ -z "$MAC" ]; then
-	log "unable to derive deterministic MAC from CPU serial"
-	exit 1
-fi
+[ -n "$MAC" ] || exit 1
 
 set_bridge_mac "$MAC" || exit 1
-log "provisioned deterministic LAN MAC $MAC"
 exit 0
