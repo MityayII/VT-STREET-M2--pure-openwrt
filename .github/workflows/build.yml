@@ -115,6 +115,9 @@ jobs:
           mkdir -p openwrt/package/base-files/image-config/files
           cp -r files/* openwrt/package/base-files/image-config/files/
 
+          # === ВОТ ЭТУ ОДНУ СТРОКУ МЫ ДОБАВЛЯЕМ В BUILD.YML ===
+          sed -i 's/set system.@system\[0\].hostname=.*/set system.@system\[0\].hostname="VT-STREET-M2"/g' openwrt/package/base-files/files/bin/config_generate
+
           # ЖЕЛЕЗНЫЙ ХУК: Выставляем права на запуск для обеих папок автоматики!
           chmod +x openwrt/package/base-files/image-config/files/etc/uci-defaults/10-fix-lan-mac 2>/dev/null || true
           chmod +x openwrt/package/base-files/image-config/files/etc/hotplug.d/iface/99-system-cleanups 2>/dev/null || true
