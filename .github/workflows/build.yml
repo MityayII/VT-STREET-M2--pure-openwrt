@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pure-openwrt-build
+  group: pure-openwrt-build-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
