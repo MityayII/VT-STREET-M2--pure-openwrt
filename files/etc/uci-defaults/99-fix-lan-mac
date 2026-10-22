@@ -1,0 +1,32 @@
+#!/bin/sh
+
+. /lib/functions/system.sh
+. /lib/functions/uci-defaults.sh
+
+# 1. Сначала проверяем оригинальный MAC в Factory (если вдруг плату восстановят)
+MAC=$(mtd_get_mac_binary Factory 40)
+
+# 2. Аварийный режим (Factory пуст/затерт)
+if [ -z "$MAC" ] || [ "$MAC" = "00:00:00:00:00:00" ] || [ "$MAC" = "ff:ff:ff:ff:ff:ff" ]; then
+	logger -t "mac-generator" "Factory MAC missing. Fetching stable silicon eth0..."
+	
+	# К этому моменту (благодаря индексу 99) интерфейс eth0 ГАРАНТИРОВАННО создан ядром!
+	serial=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':')
+	
+	# Защита от мусорного случайного префикса ядра 200802...
+	if [ -z "$serial" ] || [ "${serial##200802}" != "$serial" ]; then
+		logger -t "mac-generator" "eth0 contains kernel dynamic noise. Falling back to static seed..."
+		serial=$(printf 'VT-STREET-M2-PERMANENT-STATIC-CORE-SEED' | sha256sum | awk '{print $1}')
+	fi
+	
+	# Собираем уникальный адрес строго с префиксом 02
+	MAC="02:$(echo "$serial" | cut -c3-4):$(echo "$serial" | cut -c5-6):$(echo "$serial" | cut -c7-8):$(echo "$serial" | cut -c9-10):$(echo "$serial" | cut -c11-12)"
+fi
+
+logger -t "mac-generator" "Applying permanent LAN MAC via board.json: $MAC"
+
+# 3. Нативно раскатываем ОДИН постоянный MAC на всю LAN-цепочку (br-lan, eth0, lan1)
+ucidef_set_interface_macaddr "lan" "$MAC"
+
+board_config_flush
+exit 0
