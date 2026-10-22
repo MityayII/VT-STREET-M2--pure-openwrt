@@ -1,4 +1,4 @@
-#!/bin/sh
+проверь #!/bin/sh
 
 # Подтягиваем нативные системные библиотеки OpenWrt
 . /lib/functions/system.sh
@@ -11,12 +11,12 @@ log()
 	logger -t "$TAG" "$*"
 }
 
-# ШАГ 1: Пробуем штатный метод чтения MAC из Factory (если плата исправна)
+# ШАГ 1: Пробуем штатный метод чтения MAC из Factory (если плата вдруг исправна)
 MAC=$(mtd_get_mac_binary Factory 40)
 
 # Если в Factory чисто и адрес валидный — мы просто пропускаем аварийные шаги
 if [ -n "$MAC" ] && [ "$MAC" != "00:00:00:00:00:00" ] && [ "$MAC" != "ff:ff:ff:ff:ff:ff" ] && [ "${MAC##200802}" = "$MAC" ]; then
-	log "Valid factory MAC present; fallback not needed"
+	log "Valid factory MAC present in MTD partition; fallback not needed"
 	exit 0
 fi
 
@@ -29,23 +29,32 @@ h=""
 i=0
 # Запускаем промышленный цикл ожидания готовности MTD-драйвера флеш-памяти (до 15 секунд)
 while [ "$i" -lt 15 ]; do
+	log "Cycle такт $((i + 1)): Checking /dev/mtd2 status..."
 	if [ -c "/dev/mtd2" ] || [ -c "/dev/mtdblock2" ] || [ -f "/proc/mtd" ]; then
 		# Считываем первые 64 байта уникальных радио-калибровок чипа
 		h=$(dd if=/dev/mtd2 bs=1 count=64 2>/dev/null | sha256sum | awk '{print $1}')
-		[ -n "$h" ] && [ "$h" != "da39a3ee5e6b4b0d3255bfef95601890afd80709" ] && break
+		log "Cycle такт $((i + 1)): Generated hash payload -> $h"
+		
+		# Отсекаем ложный пустой хэш SHA-256 (пока флешка спит)
+		if [ -n "$h" ] && [ "$h" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+			log "Cycle такт $((i + 1)): SUCCESS! Valid silicon data block locked. Breaking loop."
+			break
+		fi
+	else
+		log "Cycle такт $((i + 1)): WARNING - MTD2 block device not initialized by kernel yet."
 	fi
 	sleep 1
 	i=$((i + 1))
 done
 
 # Если чтение флешки сорвалось или вернуло пустой хэш — страхуемся статичной константой модели
-if [ -z "$h" ]; then
+if [ -z "$h" ] || [ "$h" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
 	log "MTD2 partition read timeout; fallback to hardcoded safe seed"
 	h=$(printf 'VT-STREET-M2-PERMANENT-STATIC-CORE-SAFE-SEED' | sha256sum | awk '{print $1}')
 fi
 
 # Нарезаем вечный адрес. Локальный префикс 02 зашит намертво текстом!
-# Из вашего хэша 8667e718... гарантированно соберется адрес 02:67:e7:18:29:4e
+# Из вашего хэша 8667e718... гарантированно соберется вечный адрес 02:67:e7:18:29:4e
 MAC="02:$(printf '%s' "$h" | cut -c3-4):$(printf '%s' "$h" | cut -c5-6):$(printf '%s' "$h" | cut -c7-8):$(printf '%s' "$h" | cut -c9-10):$(printf '%s' "$h" | cut -c11-12)"
 
 log "Applying permanent unique LAN MAC via board.json: $MAC"
