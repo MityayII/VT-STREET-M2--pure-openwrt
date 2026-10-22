@@ -1,4 +1,4 @@
-проверь #!/bin/sh
+#!/bin/sh
 
 # Подтягиваем нативные системные библиотеки OpenWrt
 . /lib/functions/system.sh
