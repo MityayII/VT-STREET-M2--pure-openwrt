@@ -1,0 +1,65 @@
+#!/bin/sh
+
+# Подтягиваем системные библиотеки
+. /lib/functions/system.sh
+
+TAG="mac-fixer"
+
+log()
+{
+	echo "<4>[$TAG]: $*" > /dev/kmsg
+}
+
+# ШАГ 1: Проверяем, не зафиксирован ли уже MAC в UCI (Метод Макса)
+# Если после первой загрузки строка лана уже прописана, скрипт мгновенно выходит
+CURRENT_UCI_MAC=$(uci -q get network.lan.macaddr)
+if [ -n "$CURRENT_UCI_MAC" ] && [ "$CURRENT_UCI_MAC" != "20:08:02:00:00:00" ]; then
+	log "LAN MAC is already permanently frozen in UCI: $CURRENT_UCI_MAC. Exit."
+	exit 0
+fi
+
+# ШАГ 2: Проверяем родной Factory (если он вдруг оживёт)
+MAC=$(mtd_get_mac_binary Factory 40)
+if [ -n "$MAC" ] && [ "$MAC" != "00:00:00:00:00:00" ] && [ "$MAC" != "ff:ff:ff:ff:ff:ff" ]; then
+	log "Valid factory MAC found, locking it into UCI: $MAC"
+	uci set network.lan.macaddr="$MAC"
+	uci commit network
+	exit 0
+fi
+
+# ШАГ 3: АВАРЙНАЯ ГЕНЕРАЦИЯ ИЗ КРЕМНИЯ (First Boot)
+log "Factory blank. Extracting silicon data stream..."
+
+# Прямой прорыв к MTD-слою: выкусываем 64 байта Macronix
+h=$(head -c 64 /dev/mtd2 2>/dev/null | sha256sum | awk '{print $1}')
+
+# Отсекаем ложную пустоту, если чип ушёл в микросекундный таймаут
+if [ -z "$h" ] || [ "$h" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+	log "MTD layer read fault, using fallback unique seed"
+	h=$(printf 'VT-STREET-M2-SAFE-RECOVERY-YAKOR' | sha256sum | awk '{print $1}')
+fi
+
+# Нарезаем наш уникальный вечный адрес 02:67:e7:18:29:4e
+NEW_MAC="02:$(echo "$h" | cut -c3-4):$(echo "$h" | cut -c5-6):$(echo "$h" | cut -c7-8):$(echo "$h" | cut -c9-10):$(echo "$h" | cut -c11-12)"
+
+# 🔥 ЖЕСТКАЯ ФИКСАЦИЯ ПЕРЕНОСА В UCI (Замораживаем навечно)
+log "Freezing generated MAC into persistent configuration: $NEW_MAC"
+
+# Записываем адрес в секцию интерфейса LAN
+uci set network.lan.macaddr="$NEW_MAC"
+
+# Находим устройство br-lan в массиве и дублируем адрес туда
+idx=0
+while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
+	if [ "$(uci -q get "network.@device[$idx].name")" = "br-lan" ]; then
+		uci set "network.@device[$idx].macaddr=$NEW_MAC"
+		break
+	fi
+	idx=$((idx + 1))
+done
+
+# Сохраняем текстовый конфиг на постоянный диск роутера
+uci commit network
+
+log "UCI network configuration successfully locked. Прыжки остановлены."
+exit 0
