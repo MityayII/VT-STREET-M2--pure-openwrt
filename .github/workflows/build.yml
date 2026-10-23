@@ -96,6 +96,7 @@ jobs:
               '\t\t\tlocal h=$(head -c 64 /dev/mtd2 2>/dev/null | sha256sum | awk "{print \$1}")\n'
               '\t\t\tif [ -n "$h" ] && [ "$h" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then\n'
               '\t\t\t\tlan_mac="02:$(echo "$h" | cut -c3-4):$(echo "$h" | cut -c5-6):$(echo "$h" | cut -c7-8):$(echo "$h" | cut -c9-10):$(echo "$h" | cut -c11-12)"\n'
+              '\t\t\t\tucidef_set_interface_macaddr "lan" "$lan_mac"\n'
               '\t\t\tfi\n'
               '\t\tfi\n'
               '\t\t;;\n'
@@ -110,6 +111,7 @@ jobs:
               p.write_text(s)
               print("SUCCESS: 02_network patched natively!")
           PY
+          
           # 4. ЗАЩИТА NAND-ОБНОВЛЕНИЯ: Python врезает плату в системный platform.sh (Как у Макса)
           UPGRADE_FILE="$OPENWRT_DIR/target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh"
           python3 - "$UPGRADE_FILE" <<'PY'
