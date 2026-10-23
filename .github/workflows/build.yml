@@ -68,16 +68,13 @@ jobs:
             cat "$REPO_DIR/port/vertell-profile.mk" >> "$PROFILE_FILE"
           fi
 
-          # 3. БРОНЕБОЙНЫЙ ПАТЧ: Python врезает плату Vertell и нативный фиксатор МАК-адреса ядра в 02_network
+          # 3. ПАТЧ ПОРТОВ: Python врезает нашу плату в системный 02_network (Как у Макса)
           NETWORK_FILE="$OPENWRT_DIR/target/linux/ramips/mt7621/base-files/etc/board.d/02_network"
-          export NETWORK_FILE
-          python3 <<'PY'
+          python3 - "$NETWORK_FILE" <<'PY'
           from pathlib import Path
-          import os
-          
-          p = Path(os.environ['NETWORK_FILE'])
+          import sys
+          p = Path(sys.argv[1])
           s = p.read_text()
-          
           needle = '\tcase $board in\n'
           insert = (
               '\tcase $board in\n'
@@ -85,30 +82,11 @@ jobs:
               '\t\tucidef_set_interface_lan "lan1"\n'
               '\t\t;;\n'
           )
-          
-          # УБРАНА ОШИБКА: Функция только считает lan_mac, а система OpenWrt сама применит её в нужный момент!
-          mac_needle = 'ramips_setup_macs() {\n\tlocal board="$1"\n\tlocal lan_mac=""\n\tlocal wan_mac=""\n\tcase $board in\n'
-          mac_insert = (
-              'ramips_setup_macs() {\n\tlocal board="$1"\n\tlocal lan_mac=""\n\tlocal wan_mac=""\n\tcase $board in\n'
-              '\tvertell,vt-mt7621d)\n'
-              '\t\tlan_mac=$(mtd_get_mac_binary Factory 40)\n'
-              '\t\tif [ -z "$lan_mac" ] || [ "$lan_mac" = "ff:ff:ff:ff:ff:ff" ] || [ "$lan_mac" = "00:00:00:00:00:00" ]; then\n'
-              '\t\t\tlocal h=$(head -c 64 /dev/mtd2 2>/dev/null | sha256sum | awk "{print \$1}")\n'
-              '\t\t\tif [ -n "$h" ] && [ "$h" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then\n'
-              '\t\t\t\tlan_mac="02:$(echo "$h" | cut -c3-4):$(echo "$h" | cut -c5-6):$(echo "$h" | cut -c7-8):$(echo "$h" | cut -c9-10):$(echo "$h" | cut -c11-12)"\n'
-              '\t\t\tfi\n'
-              '\t\tfi\n'
-              '\t\t;;\n'
-          )
-          
           if '\tvertell,vt-mt7621d)\n' not in s:
               if needle not in s:
                   raise SystemExit('ERROR: case anchor not found in 02_network')
               s = s.replace(needle, insert, 1)
-              if mac_needle in s:
-                  s = s.replace(mac_needle, mac_insert, 1)
               p.write_text(s)
-              print("SUCCESS: 02_network patched natively!")
           PY
           
           # 4. ЗАЩИТА NAND-ОБНОВЛЕНИЯ: Python врезает плату в системный platform.sh (Как у Макса)
@@ -133,14 +111,19 @@ jobs:
               raise SystemExit('ERROR: VT-STREET-M2 is not routed to nand_do_upgrade')
           PY
 
-          # 5. Переносим наши оверлеи напрямую в официальную оверлей-структуру OpenWrt
+          # 5. ИСПРАВЛЕНО: Копируем наш кастомный нативный пакет vtmodem напрямую в дерево OpenWrt
+          rm -rf "$OPENWRT_DIR/package/vtmodem"
+          cp -a "$REPO_DIR/package/vtmodem" "$OPENWRT_DIR/package/vtmodem"
+
+
+          # 6. Переносим наши оверлеи напрямую в официальную оверлей-структуру OpenWrt
           mkdir -p openwrt/package/base-files/files/etc/uci-defaults
           cp -r files/etc/uci-defaults/* openwrt/package/base-files/files/etc/uci-defaults/
 
-          # Выдаем права на запуск нативным файлам в сборочном дереве
+          # 7. Выдаем права на запуск нативным файлам в сборочном дереве
           chmod +x openwrt/package/base-files/files/etc/uci-defaults/* 2>/dev/null || true
 
-          # 6. Загружаем базовую конфигурацию сборки
+          # 8. Загружаем базовую конфигурацию сборки
           cp config/seed.config openwrt/.config
           cd openwrt
           make defconfig
