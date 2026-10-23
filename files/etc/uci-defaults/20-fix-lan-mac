@@ -6,13 +6,12 @@
 
 TAG="mac-generator"
 
-# БРОНЕБОЙНЫЙ ВЫВОД: Пишем напрямую в буфер ядра kmsg, минуя спящий logger!
 log()
 {
 	echo "<4>[$TAG]: $*" > /dev/kmsg
 }
 
-# ШАГ 1: Пробуем штатный метод чтения MAC из Factory (если плата вдруг исправна)
+# ШАГ 1: Пробуем штатный метод чтения MAC из Factory
 MAC=$(mtd_get_mac_binary Factory 40)
 
 # Если в Factory чисто и адрес валидный — мы просто пропускаем аварийные шаги
@@ -22,13 +21,12 @@ if [ -n "$MAC" ] && [ "$MAC" != "00:00:00:00:00:00" ] && [ "$MAC" != "ff:ff:ff:f
 fi
 
 # =========================================================================
-# ШАГ 2: АВАРИЙНЫЙ РЕЖИМ (Factory MAC пуст) — ЦИКЛ КРЕМНИЕВОЙ ОПТИМИЗАЦИИ
+# ШАГ 2: АВАРИЙНЫЙ РЕЖИМ — ЦИКЛ КРЕМНИЕВОЙ ОПТИМИЗАЦИИ (ДО 15 СЕКУНД)
 # =========================================================================
 log "Factory MAC is invalid or missing. Triggering persistent hardware loop..."
 
 h=""
 i=0
-# Запускаем промышленный цикл ожидания готовности MTD-драйвера флеш-памяти (до 15 секунд)
 while [ "$i" -lt 15 ]; do
 	log "Cycle такт $((i + 1)): Checking /dev/mtd2 status..."
 	if [ -c "/dev/mtd2" ] || [ -c "/dev/mtdblock2" ] || [ -f "/proc/mtd" ]; then
@@ -55,14 +53,24 @@ if [ -z "$h" ] || [ "$h" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495
 fi
 
 # Нарезаем вечный адрес. Локальный префикс 02 зашит намертво текстом!
-MAC="02:$(printf '%s' "$h" | cut -c3-4):$(printf '%s' "$h" | cut -c5-6):$(printf '%s' "$h" | cut -c7-8):$(printf '%s' "$h" | cut -c9-10):$(printf '%s' "$h" | cut -c11-12)"
-
-log "Applying permanent unique LAN MAC via board.json: $MAC"
+MAC="02:$(printf '%s' "$h" | cut -c3-4):$(printf '%s' "$h" | cut -c5-6):$(printf '%s' "$h" | cut -c7-8):$(echo "$h" | cut -c9-10):$(echo "$h" | cut -c11-12)"
 
 # =========================================================================
-# ШАГ 3: АВТОМАТИЧЕСКАЯ РАСКАТКА ОДНОГО MAC НА ВСЕ ИНТЕРФЕЙСЫ LAN
+# ШАГ 3: ПРИНУДИТЕЛЬНЫЙ UCI-НАКАТ НАПРЯМУЮ В КОНФИГУРАТОР СЕТИ
 # =========================================================================
+log "Applying permanent unique LAN MAC via direct UCI commit: $MAC"
+
+# Нативно объявляем адрес в board.json (для LuCI статус-панелей)
 ucidef_set_interface_macaddr "lan" "$MAC"
-
 board_config_flush
+
+# Бронебойная прямая запись: пишем МАК жестко в конфиг интерфейса lan и девайса br-lan.
+# Это избавит нас от необходимости крутить сложные циклы поиска индексов секций!
+uci -q set network.lan.macaddr="$MAC"
+uci -q set network.br_lan.macaddr="$MAC"
+uci -q commit network
+
+# Перезапускаем сетевую службу на лету, чтобы сбросить случайный MAC ядра
+/etc/init.d/network restart
+
 exit 0
