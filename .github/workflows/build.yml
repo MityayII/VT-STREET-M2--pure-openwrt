@@ -70,12 +70,13 @@ jobs:
 
           # 3. БРОНЕБОЙНЫЙ ПАТЧ: Python врезает плату Vertell и нативный фиксатор МАК-адреса ядра в 02_network
           NETWORK_FILE="$OPENWRT_DIR/target/linux/ramips/mt7621/base-files/etc/board.d/02_network"
-          python3 - "$NETWORK_FILE" <<'PY'
+          export NETWORK_FILE
+          python3 <<'PY'
           from pathlib import Path
-          import sys
+          import os
           
-          # Открываем системный файл 02_network через переданный аргумент
-          p = Path(sys.argv[1])
+          # Безопасно считываем путь к файлу из системного окружения, избегая багов sys.argv
+          p = Path(os.environ['NETWORK_FILE'])
           s = p.read_text()
           
           # А) Якорь для привязки физического порта lan1 к сегменту LAN
@@ -106,7 +107,7 @@ jobs:
               '\t\t;;\n'
           )
           
-          # Запускаем ювелирную замену внутри системного файла
+          # Запускаем замену внутри системного файла
           if '\tvertell,vt-mt7621d)\n' not in s:
               if needle not in s:
                   raise SystemExit('ERROR: case anchor not found in 02_network')
