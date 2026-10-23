@@ -86,7 +86,7 @@ jobs:
               '\t\t;;\n'
           )
           
-          # Убраны лишние слэши перед $, аdd заменен на head, который умеет читать сырой MTD-слой ядра напрямую!
+          # УБРАНА ОШИБКА: Функция только считает lan_mac, а система OpenWrt сама применит её в нужный момент!
           mac_needle = 'ramips_setup_macs() {\n\tlocal board="$1"\n\tlocal lan_mac=""\n\tlocal wan_mac=""\n\tcase $board in\n'
           mac_insert = (
               'ramips_setup_macs() {\n\tlocal board="$1"\n\tlocal lan_mac=""\n\tlocal wan_mac=""\n\tcase $board in\n'
@@ -96,7 +96,6 @@ jobs:
               '\t\t\tlocal h=$(head -c 64 /dev/mtd2 2>/dev/null | sha256sum | awk "{print \$1}")\n'
               '\t\t\tif [ -n "$h" ] && [ "$h" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then\n'
               '\t\t\t\tlan_mac="02:$(echo "$h" | cut -c3-4):$(echo "$h" | cut -c5-6):$(echo "$h" | cut -c7-8):$(echo "$h" | cut -c9-10):$(echo "$h" | cut -c11-12)"\n'
-              '\t\t\t\tucidef_set_interface_macaddr "lan" "$lan_mac"\n'
               '\t\t\tfi\n'
               '\t\tfi\n'
               '\t\t;;\n'
