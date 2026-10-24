@@ -114,14 +114,10 @@ jobs:
           # 5. ИСПРАВЛЕНО: Копируем наш кастомный нативный пакет vtmodem напрямую в дерево OpenWrt
           rm -rf "$OPENWRT_DIR/package/vtmodem"
           cp -a "$REPO_DIR/package/vtmodem" "$OPENWRT_DIR/package/vtmodem"
-          
-          # 🔥 СИЛОВОЙ ИНЖЕКТОР: Забиваем флаг vtmodem в конфиг намертво в обход сбросов defconfig!
-          echo "CONFIG_PACKAGE_vtmodem=y" >> "$OPENWRT_DIR/.config"
 
-
-          # 6. Переносим наши оверлеи напрямую в официальную оверлей-структуру OpenWrt
+          # 6. Переносим остальные плоские оверлеи (99-system-cleanups и т.д.)
           mkdir -p openwrt/package/base-files/files/etc/uci-defaults
-          cp -r files/etc/uci-defaults/* openwrt/package/base-files/files/etc/uci-defaults/
+          cp -r files/* openwrt/package/base-files/files/ 2>/dev/null || true
 
           # 7. Выдаем права на запуск нативным файлам в сборочном дереве
           chmod +x openwrt/package/base-files/files/etc/uci-defaults/* 2>/dev/null || true
@@ -129,6 +125,11 @@ jobs:
           # 8. Загружаем базовую конфигурацию сборки
           cp config/seed.config openwrt/.config
           cd openwrt
+          
+          # ЖЕЛЕЗОБЕТОННЫЙ ИНЖЕКТОР: Дописываем флаг ПОСЛЕ копирования seed.config!
+          # Теперь defconfig прочитает его и принудительно скомпилирует пакет vtmodem!
+          echo "CONFIG_PACKAGE_vtmodem=y" >> .config
+          
           make defconfig
           
 
