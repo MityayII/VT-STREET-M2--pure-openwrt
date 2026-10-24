@@ -42,7 +42,7 @@ uci set network.lan.macaddr="$MAC"
 idx=0
 while uci -q get "network.@device[$idx]" >/dev/null 2>&1; do
 	if [ "$(uci -q get "network.@device[$idx].name")" = "br-lan" ]; then
-		uci set "network.@device[$idx].macaddr=$NEW_MAC"
+		uci set "network.@device[$idx].macaddr=$MAC"
 		break
 	fi
 	idx=$((idx + 1))
