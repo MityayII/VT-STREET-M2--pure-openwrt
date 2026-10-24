@@ -114,6 +114,9 @@ jobs:
           # 5. ИСПРАВЛЕНО: Копируем наш кастомный нативный пакет vtmodem напрямую в дерево OpenWrt
           rm -rf "$OPENWRT_DIR/package/vtmodem"
           cp -a "$REPO_DIR/package/vtmodem" "$OPENWRT_DIR/package/vtmodem"
+          
+          # 🔥 СИЛОВОЙ ИНЖЕКТОР: Забиваем флаг vtmodem в конфиг намертво в обход сбросов defconfig!
+          echo "CONFIG_PACKAGE_vtmodem=y" >> "$OPENWRT_DIR/.config"
 
 
           # 6. Переносим наши оверлеи напрямую в официальную оверлей-структуру OpenWrt
